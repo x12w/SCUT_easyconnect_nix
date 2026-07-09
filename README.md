@@ -39,8 +39,12 @@ sudo reboot
 ### 其他 Linux 发行版
 
 ```bash
+# 0. 确保启用 Nix flakes（仅需一次）
+mkdir -p ~/.config/nix
+echo 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
+
 # 1. 安装
-nix profile install github:x12w/SCUT_easyconnect_nix#easyconnect
+nix profile add github:x12w/SCUT_easyconnect_nix#easyconnect
 
 # 2. 一次性 root 配置（编译 SUID wrapper + 加载内核模块）
 nix run github:x12w/SCUT_easyconnect_nix#setup
