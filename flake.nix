@@ -248,27 +248,37 @@ mkdir -p "\$appdir/resourceslogs" "\$appdir/logs"
 touch "\$appdir/resources/logs/ECAgent.log" "\$appdir/resources/logs/ECAgent.bootstrap.log" 2>/dev/null || true
 chmod -R a+rwX "\$appdir/resources/logs" "\$appdir/resourceslogs" "\$appdir/logs" 2>/dev/null || true
 
-if [ -x /run/wrappers/bin/easyconnect-ecagent ]; then
-  ln -sfn /run/wrappers/bin/easyconnect-ecagent "\$bindir/ECAgent"
+WRAPDIR_NIXOS="/run/wrappers/bin"
+WRAPDIR_USER="\$HOME/.local/share/easyconnect/wrappers"
+
+if [ -x "\$WRAPDIR_NIXOS/easyconnect-ecagent" ]; then
+  ln -sfn "\$WRAPDIR_NIXOS/easyconnect-ecagent" "\$bindir/ECAgent"
+elif [ -x "\$WRAPDIR_USER/ECAgent" ]; then
+  ln -sfn "\$WRAPDIR_USER/ECAgent" "\$bindir/ECAgent"
 else
   ln -sfn ${resourceDir}/bin/ECAgent "\$bindir/ECAgent"
 fi
 
-if [ -x /run/wrappers/bin/easyconnect-svpnservice ]; then
-  ln -sfn /run/wrappers/bin/easyconnect-svpnservice "\$bindir/svpnservice"
+if [ -x "\$WRAPDIR_NIXOS/easyconnect-svpnservice" ]; then
+  ln -sfn "\$WRAPDIR_NIXOS/easyconnect-svpnservice" "\$bindir/svpnservice"
+elif [ -x "\$WRAPDIR_USER/svpnservice" ]; then
+  ln -sfn "\$WRAPDIR_USER/svpnservice" "\$bindir/svpnservice"
 else
   ln -sfn ${resourceDir}/bin/svpnservice "\$bindir/svpnservice"
 fi
 
-if [ -x /run/wrappers/bin/easyconnect-csclient ]; then
-  ln -sfn /run/wrappers/bin/easyconnect-csclient "\$bindir/CSClient"
+if [ -x "\$WRAPDIR_NIXOS/easyconnect-csclient" ]; then
+  ln -sfn "\$WRAPDIR_NIXOS/easyconnect-csclient" "\$bindir/CSClient"
+elif [ -x "\$WRAPDIR_USER/CSClient" ]; then
+  ln -sfn "\$WRAPDIR_USER/CSClient" "\$bindir/CSClient"
 else
   ln -sfn ${resourceDir}/bin/CSClient "\$bindir/CSClient"
 fi
 
-if [ ! -x /run/wrappers/bin/easyconnect-ecagent ] || [ ! -x /run/wrappers/bin/easyconnect-svpnservice ] || [ ! -x /run/wrappers/bin/easyconnect-csclient ]; then
+if [ ! -x "\$bindir/ECAgent" ] || [ ! -x "\$bindir/svpnservice" ] || [ ! -x "\$bindir/CSClient" ]; then
   echo "warning: EasyConnect helper wrappers are not installed; VPN TCP/L3 services may fail." >&2
-  echo "warning: enable the flake NixOS module with programs.easyconnect.enable = true." >&2
+  echo "warning: NixOS: set programs.easyconnect.enable = true" >&2
+  echo "warning: Other distros: run 'nix run github:x12w/SCUT_easyconnect_nix#setup'" >&2
 fi
 
 ln -sfn ${resourceDir}/bin/EasyMonitor "\$bindir/EasyMonitor"
@@ -292,6 +302,11 @@ for src in "\$appdir/resources"/*; do
 done
 
 chmod -R a+rwX "\$appdir/resources/logs" "\$appdir/resourceslogs" "\$appdir/logs" 2>/dev/null || true
+
+# Clean stale ECAgent lock file from previous crashed session
+if [ -f /tmp/com.sangfor.lockecagent ] && ! ss -ltn 2>/dev/null | grep -q '127\.0\.0\.1:54530'; then
+  rm -f /tmp/com.sangfor.lockecagent /tmp/sangfor.ec.rundata 2>/dev/null || true
+fi
 
 if ! ss -ltn 2>/dev/null | grep -q '127\.0\.0\.1:54530'; then
   "\$bindir/ECAgent" --resume >> "\$appdir/resources/logs/ECAgent.bootstrap.log" 2>&1 &
@@ -359,16 +374,68 @@ EOF
               WRAPDIR="$HOME/.local/share/easyconnect/wrappers"
               mkdir -p "$WRAPDIR"
 
+              # Map wrapper name -> actual binary to exec
+              # We prefer iptables-legacy variants (not nftables-based) for compat.
+              iptables_targets() {
+                case "$1" in
+                  iptables)              echo "$(command -v iptables-legacy || echo /usr/sbin/iptables-legacy)" ;;
+                  iptables-legacy)       echo "$(command -v iptables-legacy || echo /usr/sbin/iptables-legacy)" ;;
+                  iptables-legacy-save)  echo "$(command -v iptables-legacy-save || echo /usr/sbin/iptables-legacy-save)" ;;
+                  iptables-legacy-restore) echo "$(command -v iptables-legacy-restore || echo /usr/sbin/iptables-legacy-restore)" ;;
+                esac
+              }
               for name in iptables iptables-legacy iptables-legacy-save iptables-legacy-restore; do
                 if [ -x "$WRAPDIR/$name" ]; then
                   echo "  [OK] $name"
                 else
-                  echo "  [>>] Compiling $name wrapper..."
-                  gcc -DTARGET='"'"$(which iptables-legacy || echo /usr/sbin/iptables-legacy)"'"' \
+                  TARGET="$(iptables_targets "$name")"
+                  echo "  [>>] Compiling $name wrapper (-> $TARGET)..."
+                  gcc -DTARGET='"'$TARGET'"' \
                     -o "$WRAPDIR/$name" \
                     ${./wrappers/suid-wrapper.c}
                   sudo chown root:root "$WRAPDIR/$name"
                   sudo chmod u+s "$WRAPDIR/$name"
+                fi
+              done
+
+              # VPN service binaries (need root for TUN/iptables/routing)
+              echo ""
+              echo "--- VPN service wrappers ---"
+              for svc in ECAgent svpnservice CSClient; do
+                if [ -x "$WRAPDIR/$svc" ]; then
+                  echo "  [OK] $svc"
+                else
+                  SRC="${easyconnect}/share/sangfor/EasyConnect/resources/bin/$svc"
+                  echo "  [>>] Compiling $svc wrapper (-> $SRC)..."
+                  gcc -DTARGET='"'$SRC'"' \
+                    -o "$WRAPDIR/$svc" \
+                    ${./wrappers/suid-wrapper.c}
+                  sudo chown root:root "$WRAPDIR/$svc"
+                  sudo chmod u+s "$WRAPDIR/$svc"
+                fi
+              done
+
+              # ip / ifconfig / route (needed for TUN setup and routing)
+              echo ""
+              echo "--- Network tool wrappers ---"
+              net_tool_targets() {
+                case "$1" in
+                  ip)        echo "${pkgs.iproute2}/bin/ip" ;;
+                  ifconfig)  echo "${pkgs.nettools}/bin/ifconfig" ;;
+                  route)     echo "${pkgs.nettools}/bin/route" ;;
+                esac
+              }
+              for tool in ip ifconfig route; do
+                if [ -x "$WRAPDIR/$tool" ]; then
+                  echo "  [OK] $tool"
+                else
+                  TARGET="$(net_tool_targets "$tool")"
+                  echo "  [>>] Compiling $tool wrapper (-> $TARGET)..."
+                  gcc -DTARGET='"'$TARGET'"' \
+                    -o "$WRAPDIR/$tool" \
+                    ${./wrappers/suid-wrapper.c}
+                  sudo chown root:root "$WRAPDIR/$tool"
+                  sudo chmod u+s "$WRAPDIR/$tool"
                 fi
               done
 

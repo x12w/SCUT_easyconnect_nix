@@ -21,7 +21,6 @@ int main(int argc, char **argv) {
         fprintf(stderr, "suid-wrapper: setuid(0) failed: %s\n", strerror(errno));
         return 111;
     }
-    argv[0] = TARGET;
     execve(TARGET, argv, environ);
     fprintf(stderr, "suid-wrapper: execve(%s) failed: %s\n", TARGET, strerror(errno));
     return 1;
