@@ -1,0 +1,138 @@
+#!/bin/sh
+
+#EasyMonitor位置
+EASYMONITOR="/usr/share/sangfor/EasyConnect/resources/bin/EasyMonitor"
+
+####################
+#系统判断
+####################
+detect_distro ()
+{
+    RELEASE_ID=`lsb_release -i | cut -f2`
+    VERSION_ID=`lsb_release -r | cut -f2`
+
+    case $RELEASE_ID in
+        ubuntu|Ubuntu|UBUNTU)
+            RELEASE_TYPE=ubuntu
+            ;;
+        *)
+            RELEASE_TYPE=unkown
+            ;;
+        *)
+    esac
+
+}
+
+###################
+#删除系统服务
+###################
+#传统启动方式
+init_del_service()
+{
+    service EasyMonitor.sh stop 
+    update-rc.d -f EasyMonitor.sh remove
+    \rm  /etc/init.d/EasyMonitor.sh
+}
+#ubuntu15.04 之下版本系统服务处理函数
+upstart_del_service()
+{
+    stop EasyMonitor
+    \rm  /etc/init/EasyMonitor.conf
+}
+#ubuntu15.04及之上  版本系统服务处理函数
+system_del_service()
+{
+    systemctl stop EasyMonitor
+    systemctl disable EasyMonitor
+}
+
+del_service()
+{
+
+    if [ $RELEASE_TYPE = "ubuntu" ]	
+    then
+        #低于ubuntu15.04
+        VERSION_YEA=`echo $VERSION_ID|awk -F "." '{print$1}'`	
+        if [ ${VERSION_YEA} -lt "15" ]
+        then
+            upstart_del_service
+        else
+            system_del_service
+        fi
+    else
+        system_del_service
+    fi
+
+}
+
+#杀死可能存在的EC进程
+kill_programe()
+{
+
+    #停止所有相关进程
+    pidof EasyMonitor
+    if [ $? -eq 0 ];then
+        killall  EasyMonitor
+    fi
+    pidof EasyMonitor
+    if [ $? -eq 0 ];then
+        killall  -9 EasyMonitor
+    fi
+
+    pidof ECAgent
+    if [ $? -eq 0 ];then
+        killall ECAgent
+    fi
+    pidof ECAgent
+    if [ $? -eq 0 ];then
+        killall -9 ECAgent
+    fi
+
+    pidof EasyConnect
+    if [ $? -eq 0 ];then
+        killall EasyConnect
+    fi
+    pidof EasyConnect
+    if [ $? -eq 0 ];then
+        killall -9 EasyConnect
+    fi
+
+    pidof CSClient
+    if [ $? -eq 0 ];then
+        killall CSClient
+    fi
+    pidof CSClient
+    if [ $? -eq 0 ];then
+        killall -9 CSClient
+    fi
+
+    pidof svpnservice
+    if [ $? -eq 0 ];then
+        killall svpnservice 
+    fi
+    pidof svpnservice
+    if [ $? -eq 0 ];then
+        killall -9 svpnservice
+    fi
+
+
+}
+
+#恢复之前修改的所有相关的配置信息
+recover_ec()
+{
+    #调用EasyMonitor
+    ${EASYMONITOR} -a -r   >  /dev/null 2>&1
+}
+
+
+#停止服务
+detect_distro
+del_service
+#杀死相关进程
+kill_programe
+#恢复配置
+recover_ec
+
+echo "rm pkg before..."
+exit 0

@@ -1,0 +1,113 @@
+#!/bin/sh
+
+#系统信息,默认赋值ubuntu
+RELEASE_TYPE="ubuntu"
+RELEASE_ID=`lsb_release -i | cut -f2`
+VERSION_ID=`lsb_release -r | cut -f2`
+#######################################################################
+#宏定义
+EasyConnectDir=/usr/share/sangfor/EasyConnect
+ResourcesDir=${EasyConnectDir}/resources
+
+ECAGENT_IMPORT_CA=${ResourcesDir}"/bin/ECAgent --install-import-cert"
+#######################################################################
+
+####################
+#系统判断,lsb_release适应所有linux系统
+####################
+detect_distro ()
+{
+case $RELEASE_ID in
+    ubuntu|Ubuntu|UBUNTU)
+        RELEASE_TYPE="ubuntu"
+        ;;
+    *)
+        RELEASE_TYPE="unkown"
+        ;;
+esac
+}
+###################
+#添加系统服务
+###################
+#传统的init启动方式
+init_add_service()
+{
+    \cp ${ResourcesDir}/shell/EasyMonitor.sh /etc/init.d/
+    update-rc.d EasyMonitor.sh defaults
+    service EasyMonitor.sh start
+    #TODO
+    #cron中添加定时检查，保活EasyMonitor
+}
+#ubuntu15.04 之下版本系统服务处理函数
+upstart_add_service()
+{
+    #\cp ${ResourcesDir}/EasyMonitor.conf /etc/init/
+    start EasyMonitor
+}
+
+#ubuntu15.04及之上  版本系统服务处理函数
+system_add_service()
+{
+    systemctl enable EasyMonitor
+    systemctl start EasyMonitor
+}
+#这里面现在只处理ubuntu的情况，其他情况默认使用system方式
+add_service()
+{
+	#导入证书
+	${ECAGENT_IMPORT_CA}  >  /dev/null 2>&1
+	
+    if [ $RELEASE_TYPE = "ubuntu" ]
+    then
+
+        #echo "version type:"$VERSION_TYPE
+        VERSION_YEA=`echo $VERSION_ID|awk -F "." '{print$1}'`
+        if [ ${VERSION_YEA} -lt "15" ]
+        then
+            upstart_add_service
+        else
+            system_add_service
+        fi	
+    else
+        system_add_service
+    fi
+}
+#更改文件权限
+change_authority(){
+	#把界面的配置文件放在conf目录下,一定要在conf文件夹改权限之前copy
+	#if [ $RELEASE_TYPE = "ubuntu" ]
+	#then
+	#	\rm -f ${ResourcesDir}/app/easy_connect.json
+	#	mv ${ResourcesDir}/app/easy_connect_ubuntu.json ${ResourcesDir}/app/easy_connect.json
+	#fi
+	#cp ${ResourcesDir}/app/easy_connect.json ${ResourcesDir}/conf/
+	#把界面的脚本文件放在shell目录下
+	#cp ${ResourcesDir}/app/shell/open_browser.sh ${ResourcesDir}/shell/
+
+    #文件权限处理
+    chmod +x ${EasyConnectDir}/EasyConnect
+    #保证logs文件夹存在
+    mkdir -p ${ResourcesDir}/logs
+    chmod 777 ${ResourcesDir}/logs
+    ###CSClient创建的域套接字的句柄在这个地方，要加写权限,可以考录换个目录
+    chmod 777 ${ResourcesDir}/conf -R
+    chmod +x ${ResourcesDir}/shell/*
+
+    #更改所有者
+    chown root:root ${ResourcesDir}/bin/ECAgent
+    chown root:root ${ResourcesDir}/bin/svpnservice
+    chown root:root ${ResourcesDir}/bin/CSClient
+    #添加s权限
+    chmod +s ${ResourcesDir}/bin/ECAgent
+    chmod +s ${ResourcesDir}/bin/svpnservice
+    chmod +s ${ResourcesDir}/bin/CSClient
+}
+#手动启动EasyMonitor,这里处理可能有不妥之处，需要修改
+#${ResourcesDir}/bin/EasyMonitor
+
+#判断系统信息
+detect_distro
+change_authority
+add_service
+echo "after install pkg ..."
+exit 0

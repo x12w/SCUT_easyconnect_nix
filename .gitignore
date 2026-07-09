@@ -1,0 +1,11 @@
+# Nix build outputs
+result
+result-*
+
+# Diagnostic/log files
+*.log
+logs/
+
+# IDE / editor
+.codex
+.direnv

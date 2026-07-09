@@ -1,0 +1,11 @@
+Package: easyconnect
+Version: 7.6.7.7
+Architecture: amd64
+Maintainer: Sangfor Technologies Inc <support@sangfor.com>
+Section: net
+Priority: optional
+Installed-Size: 200000
+Homepage: http://www.sangfor.com.cn
+Description: support access to ssl vpn
+	With easyconect，you can secure and speed up connection to cooperate network at ease!
+	Note: The browser will be forcibly closed during installation.
