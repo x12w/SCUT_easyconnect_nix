@@ -1,34 +1,12 @@
-# EasyConnect for Nix / NixOS
+# EasyConnect for Nix
 
-[Sangfor EasyConnect](https://www.sangfor.com.cn/) VPN client, packaged as a Nix flake.
+[Sangfor EasyConnect](https://www.sangfor.com.cn/) VPN client packaged as a Nix flake for x86_64-linux. Works on any Linux distribution with Nix installed.
 
-**One command, any Linux distro.** Works on NixOS, Ubuntu, Debian, Arch, Fedora — anywhere Nix is installed.
+## Usage
 
-## Quick Start
+### NixOS
 
-### Any Linux Distribution (with Nix)
-
-```bash
-curl -L -O https://raw.githubusercontent.com/x12w/SCUT_easyconnect_nix/main/setup.sh
-chmod +x setup.sh
-sudo ./setup.sh install
-```
-
-Then launch:
-
-```bash
-easyconnect
-```
-
-Uninstall:
-
-```bash
-sudo ./setup.sh uninstall
-```
-
-### NixOS (with flakes enabled)
-
-Add to your system flake (`/etc/nixos/flake.nix`):
+Add to `/etc/nixos/flake.nix`:
 
 ```nix
 {
@@ -45,114 +23,108 @@ Add to your system flake (`/etc/nixos/flake.nix`):
 }
 ```
 
-Enable in configuration:
+Enable and rebuild:
 
 ```nix
 programs.easyconnect.enable = true;
 ```
-
-Rebuild (reboot recommended):
 
 ```bash
 sudo nixos-rebuild switch --flake /etc/nixos#your-host
 sudo reboot
 ```
 
-## What It Does
+Done. Everything — SUID wrappers, kernel modules, iptables — is configured automatically.
 
-The installer / NixOS module handles everything needed to make EasyConnect work:
+### Other Linux Distributions
 
-| Task | NixOS (`nixosModules`) | Other distros (`setup.sh`) |
-|------|------------------------|----------------------------|
-| Package build | `nix build` | `nix build` |
-| Kernel modules (`tun`, `ip_tables`, ...) | `boot.kernelModules` | `modprobe` |
-| SUID for VPN services | `security.wrappers` | Compiled SUID wrappers |
-| SUID for iptables (with `setuid(0)`) | Custom compiled wrapper | Custom compiled wrapper |
-| Shell/asar path fixes | Post-install patching | Bundled in package |
-| Desktop entry | N/A | `/usr/local/share/applications/` |
-| PATH entry point | Nix store link | `/usr/local/bin/easyconnect` |
+```bash
+# 1. Install
+nix profile install github:x12w/SCUT_easyconnect_nix#easyconnect
+
+# 2. One-time root setup
+nix run github:x12w/SCUT_easyconnect_nix#setup
+
+# 3. Add to PATH (in ~/.bashrc or ~/.zshrc)
+export PATH="$HOME/.local/share/easyconnect/wrappers:$PATH"
+
+# 4. Launch
+easyconnect
+```
+
+The `#setup` command compiles SUID wrappers and loads kernel modules. Only needed once.
+
+### Run without installing
+
+```bash
+nix run github:x12w/SCUT_easyconnect_nix
+```
+
+## What the Module Configures
+
+| Feature | NixOS (`programs.easyconnect`) | Other distros (`nix run ...#setup`) |
+|---------|-------------------------------|-------------------------------------|
+| Kernel modules | `boot.kernelModules` | `sudo modprobe` |
+| SUID for VPN services | `security.wrappers` (SUID) | — |
+| SUID for iptables | Custom wrapper via `security.wrappers` | Compiled SUID wrapper |
+| SUID for ip/ifconfig/route | `security.wrappers` (SUID) | — |
+| Shell/asar path patches | Build-time patching | Built into package |
+| Desktop entry | N/A | Manual |
 
 ## Requirements
 
-- **Nix** ([install](https://nixos.org/download)) with flakes enabled
-- **x86_64-linux** — EasyConnect is x86_64 only
+- **Nix** with [flakes enabled](https://nixos.wiki/wiki/Flakes)
+- **x86_64-linux** (EasyConnect is x86_64 only)
 - **Kernel modules**: `tun`, `ip_tables`, `iptable_nat`, `iptable_filter`
-- **Display server**: X11 or Wayland (for GUI)
+- **Display server**: X11 or Wayland
 - **Desktop environment**: KDE, GNOME, or any with `xdg-open`
-
-### Enable Nix Flakes
-
-If you haven't enabled flakes yet, add to `~/.config/nix/nix.conf` or `/etc/nix/nix.conf`:
-
-```
-experimental-features = nix-command flakes
-```
 
 ## Project Structure
 
 ```
-├── flake.nix                # Package derivation + NixOS module
-├── flake.lock               # Pinned nixpkgs
-├── setup.sh                 # Cross-distro one-command installer
+├── flake.nix                # Package derivation + NixOS module + setup app
+├── flake.lock
 ├── wrappers/
 │   └── suid-wrapper.c       # Generic SUID wrapper (setuid(0) + exec)
-├── iptables-wrapper.c       # Legacy standalone wrapper (used by NixOS module)
-├── EasyConnect_x64_7_6_7_3.deb  # Upstream Debian package (60MB)
-├── legacy-libs/             # 84 precompiled .so files for ABI compat
+├── EasyConnect_x64_7_6_7_3.deb
+├── legacy-libs/             # 84 precompiled .so for ABI compat
 ├── conf/                    # Default configuration
 ├── deb_control/             # Original DEB control files (reference)
 └── README.md
 ```
 
-## How the SUID Wrapper Works
-
-EasyConnect's VPN services (ECAgent, svpnservice, CSClient) need root to:
-- Create TUN network devices
-- Modify routing tables
-- Manipulate iptables NAT rules
-
-`iptables` in particular checks `getuid() != 0` and refuses to run via plain SUID
-(where `geteuid() = 0` but `getuid() = 1000`). Our wrapper calls `setuid(0)` first,
-setting both real and effective UID to root, bypassing the check.
-
-The wrapper is also used for `ip`, `ifconfig`, and `route` for compatibility.
-
 ## Troubleshooting
-
-### "Permission denied" when accessing NAT table
-
-```bash
-# NixOS: verify wrappers are SUID
-ls -la /run/wrappers/bin/iptables-legacy   # should show r-s--s--x
-
-# Test
-/run/wrappers/bin/iptables-legacy -t nat -L OUTPUT
-```
 
 ### VPN connects but drops after 1-2 minutes
 
-Kernel module `ip_tables` not loaded:
+`ip_tables` module not loaded:
 
 ```bash
 lsmod | grep ip_tables
 sudo modprobe ip_tables iptable_nat iptable_filter
 ```
 
-### Browser doesn't open when clicking resource URLs
-
-Ensure `xdg-open` works:
+### "Permission denied" in iptables
 
 ```bash
-xdg-open http://example.com
+# NixOS
+ls -la /run/wrappers/bin/iptables-legacy  # shows r-s--s--x ?
+/run/wrappers/bin/iptables-legacy -t nat -L OUTPUT
+
+# Other distros
+ls -la ~/.local/share/easyconnect/wrappers/iptables-legacy  # shows rws ?
 ```
 
-### Internet inaccessible after VPN login
+### Browser doesn't open resource URLs
 
-This is expected — EasyConnect uses split-tunnel routing. Only VPN resources
-are routed through the tunnel (tun0). If you need full-tunnel mode,
-configure it server-side.
+```bash
+xdg-open http://example.com  # test URL opening
+```
+
+### Internet blocked after VPN login
+
+Expected behavior — split-tunnel routing. Only VPN resources go through tun0.
 
 ## License
 
-This packaging code is MIT. The EasyConnect software itself is proprietary,
-owned by Sangfor Technologies. See `deb_control/readme` for upstream info.
+Packaging code: MIT. EasyConnect software: proprietary, Sangfor Technologies.

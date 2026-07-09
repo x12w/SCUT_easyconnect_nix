@@ -325,9 +325,63 @@ EOF
         default = easyconnect;
       };
 
-      apps.${system}.default = {
-        type = "app";
-        program = "${easyconnect}/bin/easyconnect";
+      apps.${system} = {
+        default = {
+          type = "app";
+          program = "${easyconnect}/bin/easyconnect";
+        };
+        setup = {
+          type = "app";
+          program = let
+            setupScript = pkgs.writeShellScriptBin "easyconnect-setup" ''
+              set -e
+              echo "EasyConnect post-install setup"
+              echo "==============================="
+              echo ""
+              echo "This script guides you through the one-time root setup needed"
+              echo "on non-NixOS systems. NixOS users should use the module instead:"
+              echo "  programs.easyconnect.enable = true"
+              echo ""
+
+              # Kernel modules
+              echo "--- Kernel modules ---"
+              for mod in tun ip_tables iptable_nat iptable_filter; do
+                if lsmod 2>/dev/null | grep -q "^$mod "; then
+                  echo "  [OK] $mod already loaded"
+                else
+                  echo "  [>>] Loading $mod..."
+                  sudo modprobe "$mod" 2>/dev/null || echo "  [!!] Failed to load $mod"
+                fi
+              done
+
+              echo ""
+              echo "--- SUID wrappers ---"
+              WRAPDIR="$HOME/.local/share/easyconnect/wrappers"
+              mkdir -p "$WRAPDIR"
+
+              for name in iptables iptables-legacy iptables-legacy-save iptables-legacy-restore; do
+                if [ -x "$WRAPDIR/$name" ]; then
+                  echo "  [OK] $name"
+                else
+                  echo "  [>>] Compiling $name wrapper..."
+                  gcc -DTARGET='"'"$(which iptables-legacy || echo /usr/sbin/iptables-legacy)"'"' \
+                    -o "$WRAPDIR/$name" \
+                    ${./wrappers/suid-wrapper.c}
+                  sudo chown root:root "$WRAPDIR/$name"
+                  sudo chmod u+s "$WRAPDIR/$name"
+                fi
+              done
+
+              echo ""
+              echo "--- Done ---"
+              echo "Add this to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
+              echo '  export PATH="$HOME/.local/share/easyconnect/wrappers:$PATH"'
+              echo ""
+              echo "Then launch EasyConnect:"
+              echo "  easyconnect"
+            '';
+          in "${setupScript}/bin/easyconnect-setup";
+        };
       };
 
       nixosModules.default = { config, lib, pkgs, ... }:
