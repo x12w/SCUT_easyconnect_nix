@@ -394,7 +394,7 @@ EOF
                     -o "$WRAPDIR/$name" \
                     ${./wrappers/suid-wrapper.c}
                   sudo chown root:root "$WRAPDIR/$name"
-                  sudo chmod u+s "$WRAPDIR/$name"
+                  sudo chmod u+s,g+s "$WRAPDIR/$name"
                 fi
               done
 
@@ -411,7 +411,7 @@ EOF
                     -o "$WRAPDIR/$svc" \
                     ${./wrappers/suid-wrapper.c}
                   sudo chown root:root "$WRAPDIR/$svc"
-                  sudo chmod u+s "$WRAPDIR/$svc"
+                  sudo chmod u+s,g+s "$WRAPDIR/$svc"
                 fi
               done
 
@@ -435,7 +435,7 @@ EOF
                     -o "$WRAPDIR/$tool" \
                     ${./wrappers/suid-wrapper.c}
                   sudo chown root:root "$WRAPDIR/$tool"
-                  sudo chmod u+s "$WRAPDIR/$tool"
+                  sudo chmod u+s,g+s "$WRAPDIR/$tool"
                 fi
               done
 

@@ -17,6 +17,10 @@ extern char **environ;
 #endif
 
 int main(int argc, char **argv) {
+    if (setgid(0) != 0) {
+        fprintf(stderr, "suid-wrapper: setgid(0) failed: %s\n", strerror(errno));
+        return 111;
+    }
     if (setuid(0) != 0) {
         fprintf(stderr, "suid-wrapper: setuid(0) failed: %s\n", strerror(errno));
         return 111;
