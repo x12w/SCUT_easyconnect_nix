@@ -336,13 +336,13 @@ EOF
           pkg = self.packages.${pkgs.system}.easyconnect;
           helperBin = "${pkg}/share/sangfor/EasyConnect/resources/bin";
 
-          # Compile a custom SUID wrapper for an iptables variant.
-          # The NixOS SUID wrapper grants euid=0 but iptables refuses to run
-          # when getuid() != geteuid(). Our wrapper calls setuid(0) first.
+          # Compile a SUID wrapper that calls setuid(0) before exec'ing the target.
+          # iptables refuses to run when getuid() != geteuid() (plain SUID).
+          # Our wrapper sets real uid=0 too, bypassing the check.
           mkIptablesWrapper = name: realBin: pkgs.runCommandCC "iptables-suid-${name}" {} ''
             mkdir -p "$out/bin"
-            gcc ${./iptables-wrapper.c} \
-              -DREAL_IPTABLES='"${realBin}"' \
+            gcc ${./wrappers/suid-wrapper.c} \
+              -DTARGET='"'${realBin}'"' \
               -o "$out/bin/${name}"
           '';
         in
