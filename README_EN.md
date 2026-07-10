@@ -4,6 +4,33 @@
 
 ## Usage
 
+### Local Build (recommended: avoids network issues)
+
+If GitHub access is unstable or downloads are slow, clone the repo and build locally:
+
+```bash
+# Option A: git clone
+git clone https://github.com/x12w/SCUT_easyconnect_nix.git
+cd SCUT_easyconnect_nix
+
+# Option B: download zip (no git needed)
+curl -L -O https://github.com/x12w/SCUT_easyconnect_nix/archive/refs/heads/main.zip
+unzip main.zip && cd SCUT_easyconnect_nix-main
+```
+
+Then choose your system:
+
+```bash
+# NixOS — reference the local path in your system flake:
+# inputs.easyconnect.url = "path:/path/to/SCUT_easyconnect_nix"
+
+# Other distros — build and install from local source:
+nix profile add .#easyconnect
+nix run .#setup
+```
+
+To update: `git pull` in the repo (or re-download the zip), then re-run the commands above.
+
 ### NixOS
 
 Add to `/etc/nixos/flake.nix`:
@@ -34,15 +61,19 @@ sudo nixos-rebuild switch --flake /etc/nixos#your-host
 sudo reboot
 ```
 
-Done. Everything — SUID wrappers, kernel modules, iptables — is configured automatically.
+Done. SUID wrappers, kernel modules, iptables — all configured automatically.
 
 ### Other Linux Distributions
 
 ```bash
-# 1. Install
-nix profile install github:x12w/SCUT_easyconnect_nix#easyconnect
+# 0. Enable Nix flakes (one-time only)
+mkdir -p ~/.config/nix
+echo 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
 
-# 2. One-time root setup
+# 1. Install
+nix profile add github:x12w/SCUT_easyconnect_nix#easyconnect
+
+# 2. One-time root setup (compile SUID wrappers + load kernel modules)
 nix run github:x12w/SCUT_easyconnect_nix#setup
 
 # 3. Add to PATH (in ~/.bashrc or ~/.zshrc)
@@ -52,7 +83,7 @@ export PATH="$HOME/.local/share/easyconnect/wrappers:$PATH"
 easyconnect
 ```
 
-The `#setup` command compiles SUID wrappers and loads kernel modules. Only needed once.
+`#setup` only needed once. All builds are Nix-controlled, version synced with the flake.
 
 ### Run without installing
 
@@ -65,11 +96,26 @@ nix run github:x12w/SCUT_easyconnect_nix
 | Feature | NixOS (`programs.easyconnect`) | Other distros (`nix run ...#setup`) |
 |---------|-------------------------------|-------------------------------------|
 | Kernel modules | `boot.kernelModules` | `sudo modprobe` |
-| SUID for VPN services | `security.wrappers` (SUID) | — |
+| SUID for VPN services | `security.wrappers` | — |
 | SUID for iptables | Custom wrapper via `security.wrappers` | Compiled SUID wrapper |
-| SUID for ip/ifconfig/route | `security.wrappers` (SUID) | — |
+| SUID for ip/ifconfig/route | `security.wrappers` | — |
 | Shell/asar path patches | Build-time patching | Built into package |
 | Desktop entry | N/A | Manual |
+
+## Project Structure
+
+```
+├── flake.nix                # Package derivation + NixOS module + setup app
+├── flake.lock
+├── wrappers/
+│   └── suid-wrapper.c       # Generic SUID wrapper (setgid(0) + setuid(0) + exec)
+├── EasyConnect_x64_7_6_7_3.deb
+├── legacy-libs/             # 84 precompiled .so for ABI compat
+├── conf/                    # Default configuration
+├── deb_control/             # Original DEB control files (reference)
+├── README.md                # Chinese readme (default)
+└── README_EN.md             # This file (English)
+```
 
 ## Requirements
 
@@ -78,20 +124,6 @@ nix run github:x12w/SCUT_easyconnect_nix
 - **Kernel modules**: `tun`, `ip_tables`, `iptable_nat`, `iptable_filter`
 - **Display server**: X11 or Wayland
 - **Desktop environment**: KDE, GNOME, or any with `xdg-open`
-
-## Project Structure
-
-```
-├── flake.nix                # Package derivation + NixOS module + setup app
-├── flake.lock
-├── wrappers/
-│   └── suid-wrapper.c       # Generic SUID wrapper (setuid(0) + exec)
-├── EasyConnect_x64_7_6_7_3.deb
-├── legacy-libs/             # 84 precompiled .so for ABI compat
-├── conf/                    # Default configuration
-├── deb_control/             # Original DEB control files (reference)
-└── README.md
-```
 
 ## Troubleshooting
 
