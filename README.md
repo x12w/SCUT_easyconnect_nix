@@ -4,6 +4,33 @@
 
 ## 使用方式
 
+### 本地构建（推荐：避免网络问题）
+
+如果 GitHub 访问不稳定或下载慢，先克隆仓库再本地构建：
+
+```bash
+# 方式 A：git clone
+git clone https://github.com/x12w/SCUT_easyconnect_nix.git
+cd SCUT_easyconnect_nix
+
+# 方式 B：下载压缩包（无需 git）
+curl -L -O https://github.com/x12w/SCUT_easyconnect_nix/archive/refs/heads/main.zip
+unzip main.zip && cd SCUT_easyconnect_nix-main
+```
+
+然后根据你的系统选择：
+
+```bash
+# NixOS — 在系统 flake 中引用本地路径：
+# inputs.easyconnect.url = "path:/path/to/SCUT_easyconnect_nix"
+
+# 其他发行版 — 从本地构建安装：
+nix profile add .#easyconnect
+nix run .#setup
+```
+
+更新时进入目录 `git pull`（或重新下载压缩包），然后重新执行上述命令。
+
 ### NixOS
 
 在系统 flake 中引入（`/etc/nixos/flake.nix`）：
