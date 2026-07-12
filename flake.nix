@@ -454,7 +454,7 @@ EOF
       nixosModules.default = { config, lib, pkgs, ... }:
         let
           cfg = config.programs.easyconnect;
-          pkg = self.packages.${pkgs.system}.easyconnect;
+          pkg = self.packages.${pkgs.stdenv.hostPlatform.system}.easyconnect;
           helperBin = "${pkg}/share/sangfor/EasyConnect/resources/bin";
 
           # Compile a SUID wrapper that calls setuid(0) before exec'ing the target.
